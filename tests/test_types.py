@@ -1,20 +1,34 @@
 from typing import Any
 
 import pytest
+from inline_snapshot import snapshot
 
 from mcp.types import (
     LATEST_PROTOCOL_VERSION,
+    CallToolResult,
     ClientCapabilities,
+    CompleteResult,
+    Completion,
     CreateMessageRequestParams,
     CreateMessageResult,
     CreateMessageResultWithTools,
+    DiscoverResult,
+    EmptyResult,
+    GetPromptResult,
     Implementation,
     InitializeRequest,
     InitializeRequestParams,
+    InputRequiredResult,
     JSONRPCRequest,
+    ListPromptsResult,
+    ListResourcesResult,
+    ListResourceTemplatesResult,
     ListToolsResult,
+    ReadResourceResult,
+    Result,
     SamplingCapability,
     SamplingMessage,
+    ServerCapabilities,
     TextContent,
     Tool,
     ToolChoice,
@@ -360,3 +374,76 @@ def test_list_tools_result_preserves_json_schema_2020_12_fields():
     assert tool.input_schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
     assert "$defs" in tool.input_schema
     assert tool.input_schema["additionalProperties"] is False
+
+
+def _wire_dump(result: Result) -> dict[str, Any]:
+    """The SDK's outbound serialization: one plain dump at every protocol version."""
+    return result.model_dump(by_alias=True, mode="json", exclude_none=True)
+
+
+def test_concrete_wire_results_always_dump_result_type_complete():
+    """Every concrete result the SDK answers with on the wire dumps resultType "complete" by default.
+
+    SDK-defined always-serialized default for the field the 2026-07-28 schema
+    requires on results; earlier peers ignore the extra key on non-empty results.
+    """
+    carriers: list[Result] = [
+        CompleteResult(completion=Completion(values=[])),
+        GetPromptResult(messages=[]),
+        CallToolResult(content=[]),
+        ReadResourceResult(contents=[]),
+        ListPromptsResult(prompts=[]),
+        ListResourcesResult(resources=[]),
+        ListResourceTemplatesResult(resource_templates=[]),
+        ListToolsResult(tools=[]),
+        DiscoverResult(
+            supported_versions=["2026-07-28"],
+            capabilities=ServerCapabilities(),
+            server_info=Implementation(name="server", version="1.0"),
+        ),
+    ]
+    for result in carriers:
+        assert _wire_dump(result)["resultType"] == "complete", type(result).__name__
+
+
+def test_cacheable_results_always_dump_their_caching_directives():
+    """The six cacheable results dump ttlMs 0 and cacheScope "private" by default at every version.
+
+    SDK-defined always-serialized defaults for the fields the 2026-07-28
+    schema requires on these results; earlier peers ignore the extra keys.
+    """
+    cacheable: list[Result] = [
+        ReadResourceResult(contents=[]),
+        ListPromptsResult(prompts=[]),
+        ListResourceTemplatesResult(resource_templates=[]),
+        ListResourcesResult(resources=[]),
+        ListToolsResult(tools=[]),
+        DiscoverResult(
+            supported_versions=["2026-07-28"],
+            capabilities=ServerCapabilities(),
+            server_info=Implementation(name="server", version="1.0"),
+        ),
+    ]
+    for result in cacheable:
+        dumped = _wire_dump(result)
+        assert dumped["ttlMs"] == 0, type(result).__name__
+        assert dumped["cacheScope"] == "private", type(result).__name__
+
+
+def test_empty_result_dumps_no_fields_by_default():
+    """A freshly constructed EmptyResult dumps as an empty object.
+
+    SDK-defined carve-out: deployed peers validate empty results strictly and
+    reject extra keys, so the SDK never volunteers resultType on them.
+    """
+    assert _wire_dump(EmptyResult()) == snapshot({})
+
+
+def test_empty_result_dumps_result_type_only_when_explicitly_tagged():
+    """EmptyResult dumps resultType only when constructed with it, as code answering 2026-07-28 sessions must."""
+    assert _wire_dump(EmptyResult(result_type="complete")) == snapshot({"resultType": "complete"})
+
+
+def test_input_required_result_dumps_its_discriminating_tag():
+    """InputRequiredResult always dumps the input_required tag that discriminates the dual-result unions."""
+    assert _wire_dump(InputRequiredResult()) == snapshot({"resultType": "input_required"})

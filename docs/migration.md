@@ -221,6 +221,20 @@ Common renames:
 
 Because `populate_by_name=True` is set, the old camelCase names still work as constructor kwargs (e.g., `Tool(inputSchema={...})` is accepted), but attribute access must use snake_case (`tool.input_schema`).
 
+### Results now serialize `resultType`, `ttlMs`, and `cacheScope` defaults
+
+The 2026-07-28 protocol revision requires every result to carry a `resultType` member and adds cache directives to the cacheable results. The v2 result types model these as fields with serialized defaults rather than `None`-defaulted optional fields, so serialized results now always include them:
+
+- `CallToolResult`, `CompleteResult`, `DiscoverResult`, `GetPromptResult`, `ListPromptsResult`, `ListResourcesResult`, `ListResourceTemplatesResult`, `ListToolsResult`, and `ReadResourceResult` serialize `"resultType": "complete"`.
+- `InputRequiredResult` serializes `"resultType": "input_required"`.
+- The cacheable results (`DiscoverResult`, `ListPromptsResult`, `ListResourcesResult`, `ListResourceTemplatesResult`, `ListToolsResult`, `ReadResourceResult`) also serialize `"ttlMs": 0` and `"cacheScope": "private"`.
+
+Modeling these as defaults keeps a single set of result types valid across protocol versions without the wire layer injecting fields at serialization time.
+
+In v1 these keys never appeared in serialized results. Receivers ignore unknown result fields, so the added keys interoperate with peers on any protocol version, but tests or recorded fixtures that compare exact serialized result payloads need the new keys added.
+
+`EmptyResult` is the deliberate exception: its `result_type` defaults to `None`, so `EmptyResult()` still dumps `{}`. Several deployed SDK implementations validate empty results strictly and reject unexpected keys, so the SDK never volunteers `resultType` on an empty result. Code answering with an empty result on a session negotiated at 2026-07-28 or later must construct `EmptyResult(result_type="complete")` explicitly (use `mcp.shared.version.is_version_at_least` for the floor check).
+
 ### `args` parameter removed from `ClientSessionGroup.call_tool()`
 
 The deprecated `args` parameter has been removed from `ClientSessionGroup.call_tool()`. Use `arguments` instead.
@@ -1166,11 +1180,18 @@ In practice, replace direct `ServerSession` use with `Server.run(read_stream, wr
 
 `BaseSession` is still used by `ClientSession`, which never relied on these members. `RequestResponder.respond()` is unchanged.
 
-### Experimental Tasks support removed
+### Experimental Tasks support removed (types restored, types-only)
 
-Tasks (SEP-1686) have been removed from the MCP specification and are no longer part of this SDK. The `mcp.client.experimental`, `mcp.server.experimental`, `mcp.shared.experimental`, and `mcp.server.lowlevel.experimental` modules have been removed, along with all `Task*` types, the `tasks` capability fields, `Tool.execution`, and the `experimental` properties on `ClientSession`, `ServerSession`, `Server`, and `ServerRequestContext`.
+Tasks (SEP-1686) runtime support has been removed from this SDK. The `mcp.client.experimental`, `mcp.server.experimental`, `mcp.shared.experimental`, and `mcp.server.lowlevel.experimental` modules are gone, along with the `experimental` properties on `ClientSession`, `ServerSession`, `Server`, and `ServerRequestContext`.
 
-Tasks are expected to return as a separate MCP extension in a future release.
+The 2025-11-25 protocol *types* are back in `mcp.types` so that 2025-11-25 task payloads can still be modeled: the `Task*` types, the `tasks` capability subtrees, `Tool.execution`, and the `task` field on the four task-augmentable params classes. They are types-only definitions:
+
+- Attributes are snake_case (`task_id`, `created_at`), aliased to the camelCase wire names.
+- Timestamps are plain `str` values, not `datetime`.
+- `GetTaskPayloadResult` follows the default extra-field policy (`ignore`), so it retains only `_meta`; validate a tasks/result payload into the original request's result type instead.
+- None of the task methods is a member of the request/notification unions, and `add_request_handler` does not dispatch them.
+
+Tasks runtime support is expected to return as a separate MCP extension in a future release.
 
 ## Deprecations
 
@@ -1213,6 +1234,10 @@ params = CallToolRequestParams(
 If you relied on extra fields round-tripping through MCP types, move that data into `_meta`.
 
 ## New Features
+
+### Newer protocol fields are modeled and retained
+
+`mcp.types` now models the 2025-11-25 and 2026-07-28 protocol fields and types (for example `resultType`, `ttlMs`/`cacheScope` on the cacheable results, and `inputResponses`/`requestState` on retried requests). Inbound payloads carrying these keys used to lose them to the unknown-field policy on re-dump; they now parse into typed fields and survive a user-level round-trip. Most of the new fields are optional with `None` defaults, so dumps of values that do not set them are unchanged; the result directive fields (`resultType`, `ttlMs`, `cacheScope`) instead carry serialized defaults — see [Results now serialize `resultType`, `ttlMs`, and `cacheScope` defaults](#results-now-serialize-resulttype-ttlms-and-cachescope-defaults) under Breaking Changes.
 
 ### `streamable_http_app()` available on lowlevel Server
 

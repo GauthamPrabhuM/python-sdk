@@ -37,7 +37,7 @@ flows — with a single subprocess test for stdio.
 ```text
 tests/interaction/
   _requirements.py      the requirements manifest (see below)
-  _helpers.py           shared type aliases + the wire-recording transport
+  _helpers.py           shared type aliases
   _connect.py           the transport-parametrized connection factories
   conftest.py           the connect fixture (the transport matrix)
   test_coverage.py      enforces the manifest ↔ test contract
@@ -59,11 +59,10 @@ directly, and therefore run once per transport: over the in-memory transport, ov
 real streamable HTTP app driven in-process through the streaming bridge, and over the legacy SSE
 transport the same way. A test connects with `async with connect(server, ...) as client:` and
 asserts the same output on every leg, because the transport is not supposed to change observable
-behaviour. Tests that are tied to one transport do not use the fixture: the wire-recording tests
-(their seam is the in-memory stream pair), the bare-`ClientSession` lifecycle tests, the
-real-clock timeout tests (the timeout machinery is transport-independent and must not race
-transport latency), and everything under `transports/`, which pins behaviour only observable on
-that transport.
+behaviour. Tests that are tied to one transport do not use the fixture: the bare-`ClientSession`
+lifecycle tests, the real-clock timeout tests (the timeout machinery is transport-independent and
+must not race transport latency), and everything under `transports/`, which pins behaviour only
+observable on that transport.
 
 A transport conformance test in `transports/` speaks raw `httpx` against the mounted ASGI app
 **only** when its assertion is about HTTP semantics that `Client` cannot observe — status codes,

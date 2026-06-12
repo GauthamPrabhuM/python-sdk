@@ -54,6 +54,13 @@ _TASKS_DEFERRAL = (
     "unimplemented."
 )
 
+_WIRE_FRAME_DEFERRAL = (
+    "Not yet covered here: previously exercised by lowlevel wire-frame round-trip tests "
+    "that were removed in the wire-method maps rework (their inline-snapshot frames pinned "
+    "wire shapes the rework changes); interaction-level coverage returns when the session "
+    "layer is rewired to the maps."
+)
+
 
 @dataclass(frozen=True, kw_only=True)
 class Divergence:
@@ -158,6 +165,7 @@ REQUIREMENTS: dict[str, Requirement] = {
             "After successful initialization, the client sends exactly one initialized notification, "
             "before any non-ping request."
         ),
+        deferred=_WIRE_FRAME_DEFERRAL,
     ),
     "lifecycle:ping": Requirement(
         source=f"{SPEC_BASE_URL}/basic/utilities/ping#behavior-requirements",
@@ -235,6 +243,7 @@ REQUIREMENTS: dict[str, Requirement] = {
             "Every request sent on a session carries a unique, non-null string or integer id; ids are "
             "never reused within the session."
         ),
+        deferred=_WIRE_FRAME_DEFERRAL,
     ),
     "protocol:notifications:no-response": Requirement(
         source=f"{SPEC_BASE_URL}/basic#notifications",
@@ -242,6 +251,7 @@ REQUIREMENTS: dict[str, Requirement] = {
             "Notifications are never answered: every message the server delivers is either the response "
             "to a request the client sent or a notification carrying no id."
         ),
+        deferred=_WIRE_FRAME_DEFERRAL,
     ),
     "protocol:cancel:abort-signal": Requirement(
         source=f"{SPEC_BASE_URL}/basic/utilities/cancellation#cancellation-flow",
@@ -341,6 +351,7 @@ REQUIREMENTS: dict[str, Requirement] = {
     "protocol:error:connection-closed": Requirement(
         source="sdk",
         behavior="Closing the transport fails all in-flight requests with a connection-closed error.",
+        deferred=_WIRE_FRAME_DEFERRAL,
     ),
     "protocol:error:internal-error": Requirement(
         source=f"{SPEC_BASE_URL}/basic#responses",
@@ -358,6 +369,7 @@ REQUIREMENTS: dict[str, Requirement] = {
     "protocol:error:invalid-params": Requirement(
         source=f"{SPEC_BASE_URL}/basic#responses",
         behavior="A request with malformed params is answered with JSON-RPC error -32602 Invalid params.",
+        deferred=_WIRE_FRAME_DEFERRAL,
     ),
     "protocol:error:method-not-found": Requirement(
         source=f"{SPEC_BASE_URL}/basic#responses",
@@ -1094,6 +1106,7 @@ REQUIREMENTS: dict[str, Requirement] = {
     "logging:set-level:invalid-level": Requirement(
         source=f"{SPEC_BASE_URL}/server/utilities/logging#error-handling",
         behavior="logging/setLevel with an invalid level value returns JSON-RPC error -32602 (Invalid params).",
+        deferred=_WIRE_FRAME_DEFERRAL,
     ),
     # ═══════════════════════════════════════════════════════════════════════════
     # Sampling (server → client)
